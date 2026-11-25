@@ -37,8 +37,13 @@ jobs:
           assert 'current.packageName' in handler
           print('Static privacy preference checks passed')
           PY
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
       - name: Install Android SDK components
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;21.4.7075529"
+        run: |
+          command -v sdkmanager
+          sdkmanager --version
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;21.4.7075529"
       - name: Initialize upstream build environment
         run: |
           export ANDROID_SDK="$ANDROID_HOME"
