@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_toolbox_title">Media Toolbox</string>
+    <string name="media_toolbox_permissions">Application permissions</string>
+    <string name="media_toolbox_permissions_summary">Review this media player’s permissions in Android Settings</string>
+    <string name="media_toolbox_restricted">Unavailable while VLC settings are restricted</string>
+    <string name="media_toolbox_unavailable">Android application settings are unavailable</string>
+</resources>
