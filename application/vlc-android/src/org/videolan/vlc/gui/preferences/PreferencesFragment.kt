@@ -143,7 +143,7 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
             .show()
     }
 
-    // Inventory and favorites only: never change launcher visibility or launch another app.
+    // Ordinary app shortcuts only: never change launcher visibility or bypass restrictions.
     @Suppress("DEPRECATION")
     private fun showToolboxAppFavorites() {
         val current = activity ?: return
@@ -174,7 +174,7 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
             setPadding(dp(20), dp(8), dp(20), dp(8))
         }
         val explanation = android.widget.TextView(current).apply {
-            text = "Daftar aplikasi yang dilaporkan Android. Favorit hanya penanda di Media Toolbox; tidak menyembunyikan, mengunci, atau membuka aplikasi."
+            text = "Daftar aplikasi biasa dan favorit. Tombol Buka memakai launcher intent standar Android. Tidak mengubah visibilitas atau izin aplikasi."
         }
         val search = android.widget.EditText(current).apply {
             hint = "Cari nama aplikasi"
@@ -235,6 +235,33 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
                 }
                 row.addView(icon, android.widget.LinearLayout.LayoutParams(dp(36), dp(36)))
                 row.addView(check, android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                val open = android.widget.Button(current).apply {
+                    text = "Buka"
+                    contentDescription = "Buka " + app.loadLabel(pm).toString()
+                    isEnabled = !current.isPinCodeSet() &&
+                        !Settings.getInstance(current).getBoolean(org.videolan.tools.KEY_RESTRICT_SETTINGS, false)
+                    setOnClickListener {
+                        if (current.isPinCodeSet() ||
+                            Settings.getInstance(current).getBoolean(org.videolan.tools.KEY_RESTRICT_SETTINGS, false)) {
+                            android.widget.Toast.makeText(current, R.string.media_toolbox_restricted, android.widget.Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        try {
+                            val ordinary = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                                .setPackage(packageName)
+                            if (pm.queryIntentActivities(ordinary, 0).none { it.activityInfo?.enabled == true && it.activityInfo?.exported == true }) {
+                                android.widget.Toast.makeText(current, "Aplikasi tidak tersedia.", android.widget.Toast.LENGTH_SHORT).show()
+                                return@setOnClickListener
+                            }
+                            current.startActivity(ordinary)
+                        } catch (_: android.content.ActivityNotFoundException) {
+                            android.widget.Toast.makeText(current, "Aplikasi tidak tersedia.", android.widget.Toast.LENGTH_SHORT).show()
+                        } catch (_: SecurityException) {
+                            android.widget.Toast.makeText(current, R.string.media_toolbox_restricted, android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                row.addView(open, android.widget.LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
                 rows.addView(row)
             }
         }
