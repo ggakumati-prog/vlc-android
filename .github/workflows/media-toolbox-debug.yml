@@ -1,0 +1,53 @@
+name: Media Toolbox Debug Build
+on:
+  push:
+    branches: [media-toolbox-v0.1]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  debug:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Verify privacy preference source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          base = Path('application/vlc-android')
+          ns = '{http://schemas.android.com/apk/res/android}'
+          root = ET.parse(base / 'res/xml/preferences.xml').getroot()
+          key = 'media_toolbox_app_permissions'
+          entries = [e for e in root.iter() if e.get(ns+'key') == key]
+          assert len(entries) == 1
+          assert entries[0].get(ns+'persistent') == 'false'
+          strings = ET.parse(base / 'res/values/media_toolbox_strings.xml').getroot()
+          assert len(strings.findall('string')) == 5
+          kotlin = (base / 'src/org/videolan/vlc/gui/preferences/PreferencesFragment.kt').read_text()
+          handler = kotlin.split('"'+key+'" -> {',1)[1].split('"directories" -> {',1)[0]
+          assert handler.index('KEY_RESTRICT_SETTINGS') < handler.index('startActivity(intent)')
+          assert 'current.packageName' in handler
+          print('Static privacy preference checks passed')
+          PY
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;21.4.7075529"
+      - name: Initialize upstream build environment
+        run: |
+          export ANDROID_SDK="$ANDROID_HOME"
+          export ANDROID_NDK="$ANDROID_HOME/ndk/21.4.7075529"
+          bash buildsystem/compile.sh --init -a arm64
+      - name: Build debug APK
+        run: ./gradlew :application:app:assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: media-toolbox-debug
+          path: application/app/build/outputs/apk/debug/**/*.apk
+          if-no-files-found: error
