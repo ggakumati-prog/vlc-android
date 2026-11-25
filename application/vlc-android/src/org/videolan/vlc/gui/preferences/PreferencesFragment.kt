@@ -74,6 +74,75 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
         }
     }
 
+    // Visible, read-only report for this media player's own permissions.
+    private val toolboxCredentialResult = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val current = activity ?: return@registerForActivityResult
+        if (result.resultCode != Activity.RESULT_OK || !isAdded ||
+            Settings.getInstance(current).getBoolean(org.videolan.tools.KEY_RESTRICT_SETTINGS, false)) {
+            return@registerForActivityResult
+        }
+        showToolboxPrivacyReport(current)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun requestToolboxCredential() {
+        val current = activity ?: return
+        if (Settings.getInstance(current).getBoolean(org.videolan.tools.KEY_RESTRICT_SETTINGS, false)) {
+            android.widget.Toast.makeText(current, R.string.media_toolbox_restricted, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val manager = current.getSystemService(android.content.Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+        if (android.os.Build.VERSION.SDK_INT < 23 || manager == null || !manager.isDeviceSecure) {
+            android.widget.Toast.makeText(current, "Kunci layar perangkat diperlukan untuk laporan privasi.", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val intent = manager.createConfirmDeviceCredentialIntent(
+            "Media Toolbox", "Konfirmasi kunci layar untuk melihat laporan izin pemutar media."
+        ) ?: return
+        try {
+            toolboxCredentialResult.launch(intent)
+        } catch (_: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(current, R.string.media_toolbox_unavailable, android.widget.Toast.LENGTH_SHORT).show()
+        } catch (_: SecurityException) {
+            android.widget.Toast.makeText(current, R.string.media_toolbox_unavailable, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun showToolboxPrivacyReport(current: FragmentActivity) {
+        val info = try {
+            current.packageManager.getPackageInfo(current.packageName, android.content.pm.PackageManager.GET_PERMISSIONS)
+        } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+            android.widget.Toast.makeText(current, R.string.media_toolbox_unavailable, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        } catch (_: SecurityException) {
+            android.widget.Toast.makeText(current, R.string.media_toolbox_unavailable, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val permissions = info.requestedPermissions.orEmpty()
+        val flags = info.requestedPermissionsFlags
+        val report = buildString {
+            append("Izin pemutar media ini saja. Laporan hanya-baca.\n\n")
+            if (permissions.isEmpty()) append("Tidak ada izin yang dilaporkan.")
+            permissions.forEachIndexed { index, permission ->
+                val flag = flags?.getOrNull(index)
+                val status = when {
+                    flag == null -> "Tidak diketahui"
+                    flag and android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED != 0 -> "Diizinkan"
+                    else -> "Tidak diizinkan"
+                }
+                append(permission).append("\n").append(status).append("\n\n")
+            }
+        }
+        androidx.appcompat.app.AlertDialog.Builder(current)
+            .setTitle("Laporan privasi Media Toolbox")
+            .setMessage(report)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
     override fun getXml() = R.xml.preferences
 
     override fun getTitleId() = R.string.preferences
@@ -91,6 +160,18 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         audioResumePref = findPreference(AUDIO_RESUME_PLAYBACK)!!
+        findPreference<Preference>("media_toolbox_app_permissions")?.parent?.addPreference(
+            Preference(requireContext()).apply {
+                key = "media_toolbox_privacy_report"
+                title = "Laporan privasi"
+                summary = "Periksa izin pemutar media dengan autentikasi kunci layar"
+                isPersistent = false
+                setOnPreferenceClickListener {
+                    requestToolboxCredential()
+                    true
+                }
+            }
+        )
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
