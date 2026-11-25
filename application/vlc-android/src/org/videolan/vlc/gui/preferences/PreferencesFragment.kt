@@ -148,6 +148,26 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
 
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         when (preference.key) {
+            "media_toolbox_app_permissions" -> {
+                val current = requireActivity()
+                // Keep this shortcut unavailable whenever VLC settings are restricted.
+                if (Settings.getInstance(current).getBoolean(org.videolan.tools.KEY_RESTRICT_SETTINGS, false)) {
+                    android.widget.Toast.makeText(current, R.string.media_toolbox_restricted, android.widget.Toast.LENGTH_SHORT).show()
+                    return true
+                }
+                val intent = Intent(
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.fromParts("package", current.packageName, null)
+                )
+                try {
+                    startActivity(intent)
+                } catch (_: android.content.ActivityNotFoundException) {
+                    android.widget.Toast.makeText(current, R.string.media_toolbox_unavailable, android.widget.Toast.LENGTH_SHORT).show()
+                } catch (_: SecurityException) {
+                    android.widget.Toast.makeText(current, R.string.media_toolbox_unavailable, android.widget.Toast.LENGTH_SHORT).show()
+                }
+                return true
+            }
             "directories" -> {
                 if (Medialibrary.getInstance().isWorking) {
                     UiTools.snacker(requireActivity(), getString(R.string.settings_ml_block_scan))
