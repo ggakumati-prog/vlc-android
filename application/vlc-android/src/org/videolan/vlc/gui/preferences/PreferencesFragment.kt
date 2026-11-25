@@ -143,6 +143,115 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
             .show()
     }
 
+    // Inventory and favorites only: never change launcher visibility or launch another app.
+    @Suppress("DEPRECATION")
+    private fun showToolboxAppFavorites() {
+        val current = activity ?: return
+        if (Settings.getInstance(current).getBoolean(org.videolan.tools.KEY_RESTRICT_SETTINGS, false)) {
+            android.widget.Toast.makeText(current, R.string.media_toolbox_restricted, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val pm = current.packageManager
+        val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val apps = try {
+            pm.queryIntentActivities(query, 0)
+                .filter { it.activityInfo != null && it.activityInfo.packageName != current.packageName }
+                .distinctBy { it.activityInfo.packageName }
+                .sortedBy { it.loadLabel(pm).toString().lowercase(java.util.Locale.ROOT) }
+        } catch (_: SecurityException) {
+            android.widget.Toast.makeText(current, R.string.media_toolbox_unavailable, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val prefs = current.getSharedPreferences("media_toolbox_favorites", android.content.Context.MODE_PRIVATE)
+        val favorites = prefs.getStringSet("packages", emptySet())?.toMutableSet() ?: mutableSetOf()
+        val visiblePackages = apps.map { it.activityInfo.packageName }.toSet()
+        favorites.retainAll(visiblePackages)
+        prefs.edit().putStringSet("packages", HashSet(favorites)).apply()
+
+        fun dp(value: Int): Int = (value * current.resources.displayMetrics.density + 0.5f).toInt()
+        val content = android.widget.LinearLayout(current).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        val explanation = android.widget.TextView(current).apply {
+            text = "Daftar aplikasi yang dilaporkan Android. Favorit hanya penanda di Media Toolbox; tidak menyembunyikan, mengunci, atau membuka aplikasi."
+        }
+        val search = android.widget.EditText(current).apply {
+            hint = "Cari nama aplikasi"
+            isSingleLine = true
+        }
+        val favoritesOnly = android.widget.CheckBox(current).apply {
+            text = "Hanya favorit"
+        }
+        val counter = android.widget.TextView(current)
+        val rows = android.widget.LinearLayout(current).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+        }
+        val scroll = android.widget.ScrollView(current).apply {
+            addView(rows)
+        }
+        content.addView(explanation)
+        content.addView(search)
+        content.addView(favoritesOnly)
+        content.addView(counter)
+        content.addView(scroll, android.widget.LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(280)
+        ))
+
+        fun render() {
+            rows.removeAllViews()
+            val term = search.text.toString().trim()
+            val filtered = apps.filter {
+                (!favoritesOnly.isChecked || it.activityInfo.packageName in favorites) &&
+                    (it.loadLabel(pm).toString().contains(term, ignoreCase = true) ||
+                        it.activityInfo.packageName.contains(term, ignoreCase = true))
+            }
+            counter.text = "${filtered.size} aplikasi • ${favorites.size} favorit"
+            if (filtered.isEmpty()) rows.addView(android.widget.TextView(current).apply {
+                text = "Tidak ada aplikasi yang cocok."
+                setPadding(0, dp(12), 0, dp(12))
+            })
+            filtered.forEach { app ->
+                val packageName = app.activityInfo.packageName
+                val row = android.widget.LinearLayout(current).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(4), 0, dp(4))
+                }
+                val icon = android.widget.ImageView(current).apply {
+                    setImageDrawable(app.loadIcon(pm))
+                    importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }
+                val check = android.widget.CheckBox(current).apply {
+                    text = app.loadLabel(pm).toString()
+                    isChecked = packageName in favorites
+                    setOnCheckedChangeListener { _, checked ->
+                        if (Settings.getInstance(current).getBoolean(org.videolan.tools.KEY_RESTRICT_SETTINGS, false)) return@setOnCheckedChangeListener
+                        if (checked) favorites.add(packageName) else favorites.remove(packageName)
+                        prefs.edit().putStringSet("packages", HashSet(favorites)).apply()
+                        if (favoritesOnly.isChecked) render()
+                        else counter.text = "${filtered.size} aplikasi • ${favorites.size} favorit"
+                    }
+                }
+                row.addView(icon, android.widget.LinearLayout.LayoutParams(dp(36), dp(36)))
+                row.addView(check, android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                rows.addView(row)
+            }
+        }
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { render() }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        favoritesOnly.setOnCheckedChangeListener { _, _ -> render() }
+        render()
+        androidx.appcompat.app.AlertDialog.Builder(current)
+            .setTitle("Daftar aplikasi & favorit")
+            .setView(content)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
     override fun getXml() = R.xml.preferences
 
     override fun getTitleId() = R.string.preferences
@@ -160,6 +269,18 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         audioResumePref = findPreference(AUDIO_RESUME_PLAYBACK)!!
+        findPreference<Preference>("media_toolbox_app_permissions")?.parent?.addPreference(
+            Preference(requireContext()).apply {
+                key = "media_toolbox_app_favorites"
+                title = "Daftar aplikasi & favorit"
+                summary = "Cari dan tandai aplikasi biasa; tidak mengubah launcher"
+                isPersistent = false
+                setOnPreferenceClickListener {
+                    showToolboxAppFavorites()
+                    true
+                }
+            }
+        )
         findPreference<Preference>("media_toolbox_app_permissions")?.parent?.addPreference(
             Preference(requireContext()).apply {
                 key = "media_toolbox_privacy_report"
