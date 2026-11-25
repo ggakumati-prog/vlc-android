@@ -39,6 +39,9 @@ jobs:
           PY
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: 'false'
       - name: Install Android SDK components
         run: |
           command -v sdkmanager
