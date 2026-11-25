@@ -138,4 +138,12 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="@string/media_toolbox_title">
+        <Preference
+                android:key="media_toolbox_app_permissions"
+                android:persistent="false"
+                android:title="@string/media_toolbox_permissions"
+                android:summary="@string/media_toolbox_permissions_summary"/>
+    </PreferenceCategory>
+
 </androidx.preference.PreferenceScreen>
