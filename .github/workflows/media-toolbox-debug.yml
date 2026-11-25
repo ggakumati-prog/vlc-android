@@ -48,6 +48,11 @@ jobs:
           sdkmanager --version
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;21.4.7075529"
       - name: Initialize upstream build environment
+        env:
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
           export ANDROID_SDK="$ANDROID_HOME"
           export ANDROID_NDK="$ANDROID_HOME/ndk/21.4.7075529"
